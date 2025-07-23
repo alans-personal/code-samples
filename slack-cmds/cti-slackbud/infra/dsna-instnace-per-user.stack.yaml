@@ -1,0 +1,327 @@
+Description: DSNA EC2 Instances run Deep Learning AMIs for team members
+
+Parameters:
+  KeyPairName:
+    Description: Name of an existing Amazon EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: cloudtech
+
+  InstanceName:
+    Description: Unique name used to identify instance, in *.dnsa.farmlab.asnyder.com and tags
+    Type: String
+    MinLength: '2'
+    MaxLength: '16'
+
+  InstanceSize:
+    Description: Size of this instance.
+    Type: String
+    ConstraintDescription: Select the size of this instance.
+    AllowedValues:
+    - t3.small
+    - t2.small
+    - p3.2xlarge
+    - p3.8xlarge
+    - m5.2xlarge
+    - c5.2xlarge
+
+
+# These are the AWS Deep Learning AMI according to
+# https://github.com/awslabs/deeplearning-cfn
+Mappings:
+
+  # AMI's last updated Feb. 221, 2019
+  AmazonLinux:
+    us-east-1:
+      AMI: ami-087379093eeda94ae
+    us-west-2:
+      AMI: ami-060f1e7b74b27ee67
+    eu-west-1:
+      AMI: ami-00822a35afa569253
+    us-east-2:
+      AMI: ami-0a06156dfe1431263
+    ap-southeast-2:
+      AMI: ami-0515ea78aad8ea686
+    ap-northeast-1:
+      AMI: ami-005014c3a04c47806
+    ap-northeast-2:
+      AMI: ami-0fe3eaf8794eb0d3b
+    ap-south-1:
+      AMI: ami-0d7c4d21157d329b2
+    eu-central-1:
+      AMI: ami-06ae1bbcb7042c6c6
+    ap-southeast-1:
+      AMI: ami-00df391eb41e2afbd
+    us-west-1:
+      AMI: ami-0ab9d3de3c0467d0c
+  Ubuntu:
+    us-east-1:
+      AMI: ami-0d96d570269578cd7
+    us-west-2:
+      AMI: ami-0027dfad6168539c7
+    eu-west-1:
+      AMI: ami-0e9085a8d461c2d01
+    us-east-2:
+      AMI: ami-0a47106e391391252
+    ap-southeast-2:
+      AMI: ami-048c002ab05a657b9
+    ap-northeast-1:
+      AMI: ami-0812aef741b2ca3c2
+    ap-northeast-2:
+      AMI: ami-0cc8a10d4b729c065
+    ap-south-1:
+      AMI: ami-0556cfc195004ba96
+    eu-central-1:
+      AMI: ami-002b6c63ff04afa5f
+    ap-southeast-1:
+      AMI: ami-01c5a0f3151202f36
+    us-west-1:
+      AMI: ami-0f627d6558d18ecfa
+
+Resources:
+  #Note these instances assume us-east-1.
+  #Will spin this up in CTI-DEV VPC for now.
+
+  DsnaInstance:
+    Type: AWS::EC2::Instance
+#    Metadata:
+#      AWS::CloudFormation::Init:
+#        config:
+#          commands:
+#            1_pvcreate:
+#              command: pvcreate /dev/xvdf
+#            2_vgcreate:
+#              command: vgcreate vg0 /dev/xvdf
+#            3_lvcreate:
+#              command: lvcreate -l 100%FREE -n myapp vg0
+#            4_mkfs:
+#              command: mkfs.ext4 /dev/vg0/myapp
+#            5_mkdir:
+#              command: mkdir /var/myapp
+#            6_fstab:
+#              command: echo "/dev/mapper/vg0-myapp /var/myapp ext4 defaults 0 2" >> /etc/fstab
+#            7_mount:
+#              command: mount -a
+    Properties:
+      ImageId: ami-0f5788229b53809c9
+      InstanceType: !Sub ${InstanceSize}
+      SubnetId: subnet-7180145c
+      KeyName:
+        Ref: KeyPairName
+      SecurityGroupIds:
+      - Ref: SecurityGroup
+      IamInstanceProfile:
+        Ref: InstanceRoleInstanceProfile
+#      BlockDeviceMappings:
+#        - DeviceName: /dev/sdf
+#          Ebs:
+#            DeleteOnTermination: false
+#            VolumeSize: 10
+      # Make sure latest security patches are applied and EBS volume mounted
+
+      # ToDo: Pre-user password.
+      # ToDo: Store Jupyter config on shutdown to S3.
+      # ToDo: Store files in ?? directory to S3/<user> on shutdown.
+      # ToDo: Get files from S3/<user> on shutdown.
+      # Need per-user shutdown command via slack.
+      UserData:
+        Fn::Base64: !Sub |
+            #!/bin/bash
+            yum -y update
+
+            aws s3 cp s3://dsna-data/jupyter_notebook_config.py /home/ec2-user/.jupyter/s3_jupyter_notebook_config.py
+            cp /home/ec2-user/.jupyter/jupyter_notebook_config.py /home/ec2-user/.jupyter/backup_jupyter_notebook_config.py
+            cp /home/ec2-user/.jupyter/s3_jupyter_notebook_config.py /home/ec2-user/.jupyter/jupyter_notebook_config.py
+            whoami >> /home/ec2-user/whoami_at_user_data.txt
+            pwd >> /home/ec2-user/pwd_initial_directory.txt
+            cd /home/ec2-user
+            pwd >> /home/ec2-user/pwd_at_user_data.txt
+            sudo -u ec2-user bash -c -l "jupyter lab &> /home/ec2-user/jupyter_out.txt &disown"
+            ps -eaf | grep jupyter >> /home/ec2-user/ps_output_at_user_data.txt
+
+            yum -y update aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource DsnaInstance --region ${AWS::Region}
+            /opt/aws/bin/cfn-signal --exit-code $? --stack ${AWS::StackName} --resource DsnaInstance --region ${AWS::Region}
+
+      Tags:
+        - Key: Name
+          Value: !Sub dsna-${InstanceName}
+        - Key: Spend_Category
+          Value: Jupyter
+        - Key: Owner
+          Value: Data-Science
+        - Key: roku:light-switch:Group
+          Value: Jupyter
+        - Key: roku:light-switch:Name
+          Value: !Sub dsna-${InstanceName}
+        - Key: roku:light-switch:StartUp_Script
+          Value: StartJupyterLabs
+        - Key: roku:cost:service_name
+          Value: Jupyter
+        - Key: roku:cost:env
+          Value: prod
+        - Key: roku:cost:business_unit
+          Value: dsna
+        - Key: roku:owner
+          Value: redacted@email.com
+
+  # Load-balancer for '${InstanceName}.dsna.farmlab.asnyder.com'
+  DsnaLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internal
+      Subnets:
+      - subnet-7180145c
+      - subnet-621d9339
+      Name: !Sub DsnaLoadBalancerFor${InstanceName}
+      SecurityGroups:
+      - Ref: SecurityGroup
+      Tags:
+      - Key: Spend_Category
+        Value: Jupyter
+      - Key: Owner
+        Value: Data-Science
+      - Key: roku:cost:service_name
+        Value: Jupyter
+      - Key: roku:cost:env
+        Value: prod
+      - Key: roku:cost:business_unit
+        Value: dsna
+      - Key: roku:owner
+        Value: redacted@email.com
+
+  DsnaLoadBalancingListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+      - CertificateArn: arn:aws:acm:us-east-1:123456789012:certificate/0a08b7d8-59e7-4a7f-a6fc-f8ed32a621e8
+      LoadBalancerArn:
+        Ref: DsnaLoadBalancer
+      Port: '443'
+      Protocol: HTTPS
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: DsnaTargetGroup
+
+  DsnaTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+      Port: 8888
+      Protocol: HTTP
+      Targets:
+      - Id: !Ref DsnaInstance
+      VpcId: vpc-70376e17
+      Tags:
+      - Key: Spend_Category
+        Value: Jupyter
+      - Key: Owner
+        Value: Data-Science
+      - Key: roku:cost:service_name
+        Value: Jupyter
+      - Key: roku:cost:env
+        Value: prod
+      - Key: roku:cost:business_unit
+        Value: dsna
+      - Key: roku:owner
+        Value: redacted@email.com
+
+  DsnaDnsRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z18GAL7O6N3SW1
+      Comment: DNS for DSNA Instance for team members
+      Name: !Sub ${InstanceName}.dsna.farmlab.asnyder.com.
+      Type: CNAME
+      TTL: '900'
+      ResourceRecords:
+      - !GetAtt DsnaLoadBalancer.DNSName
+
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Internal HTTP access via port 80, 8888 and SSH access via VPN. 12345 needed of H2O diverless AMI 1.5.1
+      VpcId: vpc-70376e17
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 10.0.0.0/8
+      - IpProtocol: tcp
+        FromPort: 8888
+        ToPort: 8888
+        CidrIp: 10.0.0.0/8
+      - IpProtocol: tcp
+        FromPort: 12345
+        ToPort: 12345
+        CidrIp: 10.0.0.0/8
+
+  # Instance permissions
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+
+  # Instance Policies
+  InstanceRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: InstanceRole
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action:
+          - autoscaling:Describe*
+          - cloudformation:Describe*
+          - cloudformation:GetTemplate
+          - s3:Get*
+          - lambda:InvokeFunction
+          - acm:GetCertificate
+          - ssm:*
+          - ec2:Describe*
+          - dynamodb:Get*
+          Resource: "*"
+        - Effect: Allow
+          Action:
+          - s3:ListBucket
+          Resource:
+          - arn:aws:s3:::dsna-data
+        - Effect: Allow
+          Action:
+          - s3:PutObject
+          - s3:GetObject
+          Resource:
+          - arn:aws:s3:::dsna-data/*
+      Roles:
+      - Ref: InstanceRole
+
+  # Role profile
+  InstanceRoleInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: InstanceRole

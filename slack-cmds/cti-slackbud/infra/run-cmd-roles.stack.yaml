@@ -1,0 +1,50 @@
+Description: Roles needed by Slack Run command should be here.
+
+Conditions:
+  IsUnityDev:  !Equals [ "123456789012" , !Ref "AWS::AccountId"]
+  IsUnityProd: !Equals [ "234567890123" , !Ref "AWS::AccountId"]
+  CreateUnityCmdRole: !Or [Condition: IsUnityDev,
+                           Condition: IsUnityProd]
+Resources:
+
+  UnityRunCmdRole:
+    Type: "AWS::IAM::Role"
+    Condition: CreateUnityCmdRole
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                - arn:aws:iam::123456789012:root
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyDocument:
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "VisualEditor0",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:GetAuthorizationToken",
+                    "ecr:UploadLayerPart",
+                    "ecr:PutImage",
+                    "ecr:SetRepositoryPolicy",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:Describe*",
+                    "ecr:Tag*",
+                    "eks:DescribeCluster",
+                    "eks:ListClusters",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:GetLifecyclePolicy"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          PolicyName: unity-build-tracker-lambda-policy

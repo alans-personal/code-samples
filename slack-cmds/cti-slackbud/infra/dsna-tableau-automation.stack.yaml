@@ -1,0 +1,145 @@
+Description: DSNA EC2 Instances run Deep Learning AMIs for team members
+
+Parameters:
+
+  DsnaTableauDBMasterUsername:
+    Description: Norm database, Master user name.
+    Type: String
+
+  DsnaTableauDBMasterPassword:
+    Description: Norm database, Master password.
+    Type: String
+
+Resources:
+  #Note these instances assume us-east-1.
+  #Will spin this up in CTI-DEV VPC for now.
+
+  # Very quick version just to get something running for dev.
+  # Might want to switch to aurora-mysql if database size will
+  # grow in the future
+  DsnaTableauDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBSubnetGroupName: !Ref DsnaTableauDBServerSubnetGroups
+      VPCSecurityGroups:
+      - !Ref SecurityGroup
+      AllocatedStorage: '5'
+      DBInstanceClass: db.t3.micro
+      Engine: MySQL
+      MasterUsername: !Ref DsnaTableauDBMasterUsername
+      MasterUserPassword: !Ref DsnaTableauDBMasterPassword
+      Tags:
+      - Key: Name
+        Value: DsnaTableau-DB
+      - Key: Spend_Category
+        Value: Jupyter
+    DeletionPolicy: Snapshot
+
+  DsnaTableauDBServerSubnetGroups:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: CtiDev Subnets
+      DBSubnetGroupName: default-vpc-70376e17
+      SubnetIds:
+        - subnet-7180145c
+        - subnet-7680145b
+        - subnet-79450230
+        - subnet-611d933a
+        - subnet-621d9339
+        - subnet-78450231
+      Tags:
+        - Key: Spend_Category
+          Value: Jupyter
+
+
+#  DsnaDnsRecordSet:
+#    Type: AWS::Route53::RecordSet
+#    Properties:
+#      HostedZoneId: ZUL4J2PRAYZ27
+#      Comment: DNS for DSNA Instance for team members
+#      Name: dsna-tableau-portal.eng.asnyder.com.
+#      Type: CNAME
+#      TTL: '900'
+#      ResourceRecords:
+#      - !GetAtt DsnaLoadBalancer.DNSName
+
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Internal HTTP access via port 80, 8888 and SSH access via VPN. 12345 needed of H2O diverless AMI 1.5.1
+      VpcId: vpc-70376e17
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 10.0.0.0/8
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        CidrIp: 10.0.0.0/8
+
+  # Instance permissions
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+
+  # Instance Policies
+  InstanceRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: InstanceRole
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action:
+          - autoscaling:Describe*
+          - cloudformation:Describe*
+          - cloudformation:GetTemplate
+          - s3:Get*
+          - lambda:InvokeFunction
+          - acm:GetCertificate
+          - ssm:*
+          - ec2:Describe*
+          - dynamodb:Get*
+          Resource: "*"
+        - Effect: Allow
+          Action:
+          - s3:ListBucket
+          Resource:
+          - arn:aws:s3:::dsna-data
+        - Effect: Allow
+          Action:
+          - s3:PutObject
+          - s3:GetObject
+          Resource:
+          - arn:aws:s3:::dsna-data/*
+      Roles:
+      - Ref: InstanceRole
+
+  # Role profile
+  InstanceRoleInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: InstanceRole

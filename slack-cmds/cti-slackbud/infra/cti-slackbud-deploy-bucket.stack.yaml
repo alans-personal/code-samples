@@ -1,0 +1,48 @@
+Description: SlackBud S3 buckets need to exist before pipeline created.
+
+Resources:
+
+  LambdaFunctionZipFilesS3Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: "cti-lambda-function-zipfiles"
+      Tags:
+        - Key: Spend_Category
+          Value: CTI-Slack
+        - Key: roku:cost:service_name
+          Value: CTI-Slack
+        - Key: roku:cost:env
+          Value: prod
+        - Key: roku:cost:business_unit
+          Value: coredevops
+        - Key: roku:owner
+          Value: asnyder@roku.com
+
+  ServerlessDeploymentBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: "cti-lambda-serverless-deploy-bucket"
+      Tags:
+        - Key: Spend_Category
+          Value: CTI-Slack
+        - Key: roku:cost:service_name
+          Value: CTI-Slack
+        - Key: roku:cost:env
+          Value: prod
+        - Key: roku:cost:business_unit
+          Value: coredevops
+        - Key: roku:owner
+          Value: asnyder@roku.com
+
+Outputs:
+  S3DeploymentZipFileBucketName:
+    Value: !Ref LambdaFunctionZipFilesS3Bucket
+    Description: Name of S3 bucket which as lambda code zip files
+    Export:
+      Name: !Sub cti-slackBud-S3DeploymentZipFileBucketName
+
+  S3ServerlessFrameworkBucketName:
+    Value: !Ref ServerlessDeploymentBucket
+    Description: Name of S3 bucket used by serverless framework
+    Export:
+      Name: !Sub cti-slackBud-S3ServerlessFrameworkBucketName

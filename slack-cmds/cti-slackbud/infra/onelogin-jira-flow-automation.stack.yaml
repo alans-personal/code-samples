@@ -1,0 +1,190 @@
+Description: SlackBud S3 buckets need to exist before pipeline created.
+
+Resources:
+
+# DynamoDB table to keep track of JIRA tickets
+  JiraCheckTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      TableName: JiraCheck
+      AttributeDefinitions:
+      - AttributeName: slackBudSessionId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: slackBudSessionId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Spend_Category
+          Value: CTI-Slack
+        - Key: roku:cost:service_name
+          Value: CTI-Slack
+        - Key: roku:cost:service_name
+          Value: prod
+        - Key: roku:cost:business_unit
+          Value: coredevops
+        - Key: roku:owner
+          Value: asnyder@roku.com
+
+# Lambda function to monitor DynamoDB table, and make updates.
+  JiraCheckLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: jwt-refresh-lambda
+      Handler: "lambda_jwt_refresh.handler"
+      Code:
+        S3Bucket: !ImportValue cti-slackBud-S3DeploymentZipFileBucketName
+        S3Key: "slack-bud-output/slack-bud-lambda.zip"
+      Role: !GetAtt JiraCheckExecutionRole.Arn
+      Description: "Refresh JWT token in Parameter Store used by Slack and other services"
+      Runtime: "python3.6"
+      Timeout: "120"
+      VpcConfig:
+        SubnetIds:
+        - subnet-1124b33c
+#        SecurityGroupIds:
+#        - Ref: CtiProdSlackBudSecurityGroup
+      Tags:
+        - Key: Spend_Category
+          Value: CTI-Slack
+        - Key: roku:cost:service_name
+          Value: CTI-Slack
+        - Key: roku:cost:service_name
+          Value: prod
+        - Key: roku:cost:business_unit
+          Value: coredevops
+        - Key: roku:owner
+          Value: asnyder@roku.com
+
+  JiraCheckExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            AWS: 'arn:aws:iam::141602222194:role/cti_common_aws_iam_role'
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - sts:AssumeRole
+            - iam:GetRole
+            - iam:PassRole
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Effect: Allow
+            Resource: arn:aws:logs:*:*:*
+          - Action:
+            - lambda:*
+            - ssm:*
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - iam:GenerateCredentialReport
+            - iam:GenerateServiceLastAccessedDetails
+            - iam:Get*
+            - iam:List*
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - elasticfilesystem:*
+            - s3:*
+            - logs:*
+            - sts:*
+            - dynamodb:*
+            - elasticloadbalancing:*
+            - iam:*
+            - route53domains:*
+            - cloudwatch:*
+            - kms:*
+            - lambda:*
+            - ecs:*
+            - route53:*
+            - ec2:*
+            - ecr:*
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: jwt-refresh-policy
+
+
+# CloudWatch event CRON for lambda function
+  JiraCheckCronRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "ScheduledRule"
+      ScheduleExpression: "rate(12 hours)"
+      State: "ENABLED"
+      Targets:
+        -
+          Arn:
+            Fn::GetAtt:
+              - "JiraCheckLambdaFunction"
+              - "Arn"
+          Id: "TargetFunctionV1"
+
+  PermissionForEventsToInvokeJiraCheckLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: "JiraCheckLambdaFunction"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
+        Fn::GetAtt:
+        - "JiraCheckCronRule"
+        - "Arn"
+
+
+#  LambdaFunctionZipFilesS3Bucket:
+#    Type: "AWS::S3::Bucket"
+#    Properties:
+#      BucketName: "cti-lambda-function-zipfiles"
+#      Tags:
+#        - Key: Spend_Category
+#          Value: CTI-Slack
+#
+#  ServerlessDeploymentBucket:
+#    Type: "AWS::S3::Bucket"
+#    Properties:
+#      BucketName: "cti-lambda-serverless-deploy-bucket"
+#      Tags:
+#        - Key: Spend_Category
+#          Value: CTI-Slack
+
+
+
+
+
+Outputs:
+  S3DeploymentZipFileBucketName:
+    Value: !Ref LambdaFunctionZipFilesS3Bucket
+    Description: Name of S3 bucket which as lambda code zip files
+    Export:
+      Name: !Sub cti-slackBud-S3DeploymentZipFileBucketName
+
+  S3ServerlessFrameworkBucketName:
+    Value: !Ref ServerlessDeploymentBucket
+    Description: Name of S3 bucket used by serverless framework
+    Export:
+      Name: !Sub cti-slackBud-S3ServerlessFrameworkBucketName

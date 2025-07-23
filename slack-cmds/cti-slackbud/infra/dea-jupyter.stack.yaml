@@ -1,0 +1,516 @@
+Description: DEA EC2 Instances to run Jupyter Notebooks and Deep Learning AMIs
+
+Parameters:
+  KeyPairName:
+    Description: Name of an existing Amazon EC2 KeyPair to enable SSH access to the
+      instances
+    Type: AWS::EC2::KeyPair::KeyName
+
+# These are the AWS Deep Learning AMI according to
+# https://github.com/awslabs/deeplearning-cfn
+Mappings:
+
+  # AMI's last updated Feb. 1, 2019
+  AmazonLinux:
+    us-east-1:
+      AMI: ami-0f5788229b53809c9
+    us-west-2:
+      AMI: ami-0c0c1a8d6a4695fdc
+    eu-west-1:
+      AMI: ami-088b2e2cc2498f3ca
+    us-east-2:
+      AMI: ami-001f9c1ca57fbc7a2
+    ap-southeast-2:
+      AMI: ami-02c907307d02dc462
+    ap-northeast-1:
+      AMI: ami-08a7740ff4d3fd90f
+    ap-northeast-2:
+      AMI: ami-07b22a7626892dd48
+    ap-south-1:
+      AMI: ami-074811debc0b11bdf
+    eu-central-1:
+      AMI: ami-055ab192b68ca4d2f
+    ap-southeast-1:
+      AMI: ami-044c38d8c0100ea15
+    us-west-1:
+      AMI: ami-0351f8fc8044b3dea
+  Ubuntu:
+    us-east-1:
+      AMI: ami-09a706a24845d0723
+    us-west-2:
+      AMI: ami-0b294f219d14e6a82
+    eu-west-1:
+      AMI: ami-086062166ec8340ac
+    us-east-2:
+      AMI: ami-003ce277a8a9c0014
+    ap-southeast-2:
+      AMI: ami-0512a7cd86ea45901
+    ap-northeast-1:
+      AMI: ami-07a65197e224510c7
+    ap-northeast-2:
+      AMI: ami-098cb0cca04bdac5a
+    ap-south-1:
+      AMI: ami-01e5f909b3c234383
+    eu-central-1:
+      AMI: ami-0f57552c8fc9e228f
+    ap-southeast-1:
+      AMI: ami-077b987c8b7a6462e
+    us-west-1:
+      AMI: ami-0f4a47e4242cb9816
+
+Resources:
+  #Note these instances assume us-east-1.
+  #Will spin this up in CTI-DEV VPC for now.
+
+  #TensorFlowInstance: #(will be GPU) rename when you have a chance.
+  GpuInstance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          commands:
+            1_pvcreate:
+              command: pvcreate /dev/xvdf
+            2_vgcreate:
+              command: vgcreate vg0 /dev/xvdf
+            3_lvcreate:
+              command: lvcreate -l 100%FREE -n myapp vg0
+            4_mkfs:
+              command: mkfs.ext4 /dev/vg0/myapp
+            5_mkdir:
+              command: mkdir /var/myapp
+            6_fstab:
+              command: echo "/dev/mapper/vg0-myapp /var/myapp ext4 defaults 0 2" >> /etc/fstab
+            7_mount:
+              command: mount -a
+    Properties:
+      ImageId: ami-0f5788229b53809c9
+      InstanceType: p3.2xlarge
+      SubnetId: subnet-7180145c
+      KeyName:
+        Ref: KeyPairName
+      SecurityGroupIds:
+      - Ref: SecurityGroup
+      IamInstanceProfile:
+        Ref: InstanceRoleInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdf
+          Ebs:
+            DeleteOnTermination: false
+            VolumeSize: 10
+      # Make sure latest security patches are applied and EBS volume mounted
+      UserData:
+        Fn::Base64: !Sub |
+            #!/bin/bash
+            yum -y update
+
+            yum -y update aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+            /opt/aws/bin/cfn-signal --exit-code $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+
+      Tags:
+        - Key: Name
+          Value: dsna-gpu
+        - Key: Spend_Category
+          Value: Jupyter
+        - Key: roku:cost:service_name
+          Value: Jupyter
+        - Key: roku:cost:env
+          Value: prod
+        - Key: roku:cost:business_unit
+          Value: dsna
+        - Key: roku:owner
+          Value: redacted@email.com
+        - Key: Owner
+          Value: Data-Science
+        - Key: roku:light-switch:group
+          Value: Jupyter
+        - Key: roku:light-switch:start-script
+          Value: run-jupyter-labs
+
+  # Load-balancer for 'jupyter.farmlab.asnyder.com'
+  DsnaGpuWebSocketLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internal
+      Subnets:
+      - subnet-7180145c
+      - subnet-621d9339
+      Name: DsnaGpuWebSocketALB
+      SecurityGroups:
+      - Ref: SecurityGroup
+      Tags:
+      - Key: Spend_Category
+        Value: Jupyter
+      - Key: Owner
+        Value: Data-Science
+      - Key: roku:cost:service_name
+        Value: Jupyter
+      - Key: roku:cost:env
+        Value: prod
+      - Key: roku:cost:business_unit
+        Value: dsna
+      - Key: roku:owner
+        Value: redacted@email.com
+
+  DsnaGpuLoadBalancingListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+      - CertificateArn: arn:aws:acm:us-east-1:141602222194:certificate/fa0a5b94-892b-4ec8-8e32-ffd673c0853c
+      LoadBalancerArn:
+        Ref: DsnaGpuWebSocketLoadBalancer
+      Port: '443'
+      Protocol: HTTPS
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: DsnaGpuTargetGroup
+
+  DsnaGpuTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+      Port: 8888
+      Protocol: HTTP
+      Targets:
+      - Id: !Ref GpuInstance
+      VpcId: vpc-70376e17
+      Tags:
+      - Key: Spend_Category
+        Value: Jupyter
+      - Key: Owner
+        Value: Data-Science
+      - Key: roku:cost:service_name
+        Value: Jupyter
+      - Key: roku:cost:env
+        Value: prod
+      - Key: roku:cost:business_unit
+        Value: dsna
+      - Key: roku:owner
+        Value: redacted@email.com
+
+  DsnaGpuDnsRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z18GAL7O6N3SW1
+      Comment: DNS for Jupyter Data Science machines
+      Name: dsna-gpu.farmlab.asnyder.com.
+      Type: CNAME
+      TTL: '900'
+      ResourceRecords:
+      - !GetAtt DsnaGpuWebSocketLoadBalancer.DNSName
+
+
+  TensorFlowInstance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          commands:
+            1_pvcreate:
+              command: pvcreate /dev/xvdf
+            2_vgcreate:
+              command: vgcreate vg0 /dev/xvdf
+            3_lvcreate:
+              command: lvcreate -l 100%FREE -n myapp vg0
+            4_mkfs:
+              command: mkfs.ext4 /dev/vg0/myapp
+            5_mkdir:
+              command: mkdir /var/myapp
+            6_fstab:
+              command: echo "/dev/mapper/vg0-myapp /var/myapp ext4 defaults 0 2" >> /etc/fstab
+            7_mount:
+              command: mount -a
+    Properties:
+      #ImageId: ami-0a4b759b63b333b0e # Amazon Deep Learning AMI
+      ImageId: ami-0e9a39073f057d524 # h2o driverless ami 1.5.1
+      InstanceType: p3.2xlarge
+      SubnetId: subnet-7180145c
+      KeyName:
+        Ref: KeyPairName
+      SecurityGroupIds:
+      - Ref: SecurityGroup
+      IamInstanceProfile:
+        Ref: InstanceRoleInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdf
+          Ebs:
+            DeleteOnTermination: false
+            VolumeSize: 10
+      # Make sure latest security patches are applied and EBS volume mounted
+      UserData:
+        Fn::Base64: !Sub |
+            #!/bin/bash
+            yum -y update
+
+            yum -y update aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+            /opt/aws/bin/cfn-signal --exit-code $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+
+      Tags:
+        - Key: Name
+          Value: Tensorflow
+        - Key: Spend_Category
+          Value: Jupyter
+        - Key: Owner
+          Value: Data-Science
+        - Key: roku:light-switch:group
+          Value: Jupyter
+        - Key: roku:cost:service_name
+          Value: Jupyter
+        - Key: roku:cost:env
+          Value: prod
+        - Key: roku:cost:business_unit
+          Value: dsna
+        - Key: roku:owner
+          Value: redacted@email.com
+
+  #JupyterInstance: #smaller of the two. Rename when you have a chance.
+  DsnaInstance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          commands:
+            1_pvcreate:
+              command: pvcreate /dev/xvdf
+            2_vgcreate:
+              command: vgcreate vg0 /dev/xvdf
+            3_lvcreate:
+              command: lvcreate -l 100%FREE -n myapp vg0
+            4_mkfs:
+              command: mkfs.ext4 /dev/vg0/myapp
+            5_mkdir:
+              command: mkdir /var/myapp
+            6_fstab:
+              command: echo "/dev/mapper/vg0-myapp /var/myapp ext4 defaults 0 2" >> /etc/fstab
+            7_mount:
+              command: mount -a
+    Properties:
+      ImageId: ami-07a8025bf6c79b171
+      InstanceType: t2.small
+      SubnetId: subnet-7180145c
+      KeyName:
+        Ref: KeyPairName
+      SecurityGroupIds:
+      - Ref: SecurityGroup
+      IamInstanceProfile:
+        Ref: InstanceRoleInstanceProfile
+      BlockDeviceMappings:
+      - DeviceName: /dev/sdf
+        Ebs:
+          DeleteOnTermination: false
+          VolumeSize: 10
+      # Make sure security patches are applied and EBS volume mounted.
+      UserData:
+        Fn::Base64: !Sub |
+            #!/bin/bash
+            yum -y update
+
+            yum -y update aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+            /opt/aws/bin/cfn-signal --exit-code $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+
+      Tags:
+        - Key: Name
+          Value: Jupyter
+        - Key: Spend_Category
+          Value: Jupyter
+        - Key: Owner
+          Value: Data-Science
+        - Key: roku:light-switch:group
+          Value: Jupyter
+        - Key: roku:cost:service_name
+          Value: Jupyter
+        - Key: roku:cost:env
+          Value: prod
+        - Key: roku:cost:business_unit
+          Value: dsna
+        - Key: roku:owner
+          Value: redacted@email.com
+
+  # Load-balancer for 'jupyter.farmlab.asnyder.com'
+  TensorFlowWebSocketLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internal
+      Subnets:
+      - subnet-7180145c
+      - subnet-621d9339
+      Name: TensorFlowWebSocketALB
+      SecurityGroups:
+      - Ref: SecurityGroup
+      Tags:
+      - Key: Spend_Category
+        Value: Jupyter
+      - Key: Owner
+        Value: Data-Science
+      - Key: roku:cost:service_name
+        Value: Jupyter
+      - Key: roku:cost:env
+        Value: prod
+      - Key: roku:cost:business_unit
+        Value: dsna
+      - Key: roku:owner
+        Value: redacted@email.com
+
+  TensorFlowLoadBalancingListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+      - CertificateArn: arn:aws:acm:us-east-1:141602222194:certificate/4f3e27ef-2d1c-48ec-9919-44ead2a8bd45
+      LoadBalancerArn:
+        Ref: TensorFlowWebSocketLoadBalancer
+      Port: '443'
+      Protocol: HTTPS
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: TensorFlowTargetGroup
+
+  TensorFlowTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+      # Port: 8888 # Use this for Amazon Deep Learning AMI.
+      Port: 12345
+      Protocol: HTTP
+      Targets:
+      - Id: !Ref TensorFlowInstance
+      VpcId: vpc-70376e17
+      Tags:
+      - Key: Spend_Category
+        Value: Jupyter
+      - Key: Owner
+        Value: Data-Science
+      - Key: roku:cost:service_name
+        Value: Jupyter
+      - Key: roku:cost:env
+        Value: prod
+      - Key: roku:cost:business_unit
+        Value: dsna
+      - Key: roku:owner
+        Value: redacted@email.com
+
+  JupyterDnsRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z18GAL7O6N3SW1
+      Comment: DNS for Jupyter Data Science machines
+      Name: jupyter.farmlab.asnyder.com.
+      Type: CNAME
+      TTL: '900'
+      ResourceRecords:
+      - !GetAtt TensorFlowWebSocketLoadBalancer.DNSName
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Internal HTTP access via port 80, 8888 and SSH access via VPN. 12345 needed of H2O diverless AMI 1.5.1
+      VpcId: vpc-70376e17
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 10.0.0.0/8
+      - IpProtocol: tcp
+        FromPort: 8888
+        ToPort: 8888
+        CidrIp: 10.0.0.0/8
+      - IpProtocol: tcp
+        FromPort: 12345
+        ToPort: 12345
+        CidrIp: 10.0.0.0/8
+
+  # Instance permissions
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+
+  # Instance Policies
+  InstanceRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: InstanceRole
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action:
+          - autoscaling:Describe*
+          - cloudformation:Describe*
+          - cloudformation:GetTemplate
+          - s3:Get*
+          - lambda:InvokeFunction
+          - acm:GetCertificate
+          - ssm:*
+          - ec2:Describe*
+          - dynamodb:Get*
+          Resource: "*"
+        - Effect: Allow
+          Action:
+          - s3:ListBucket
+          Resource:
+          - arn:aws:s3:::dsna-data
+        - Effect: Allow
+          Action:
+          - s3:PutObject
+          - s3:GetObject
+          Resource:
+          - arn:aws:s3:::dsna-data/*
+      Roles:
+      - Ref: InstanceRole
+
+  # Role profile
+  InstanceRoleInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: InstanceRole
+
+  # DSNA Data bucket within CTI.
+  DsnaDataBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: dsna-data
+      Tags:
+      - Key: Spend_Category
+        Value: Jupyter
+      - Key: Owner
+        Value: Data-Science
+      - Key: roku:cost:service_name
+        Value: Jupyter
+      - Key: roku:cost:env
+        Value: prod
+      - Key: roku:cost:business_unit
+        Value: dsna
+      - Key: roku:owner
+        Value: redacted@email.com
