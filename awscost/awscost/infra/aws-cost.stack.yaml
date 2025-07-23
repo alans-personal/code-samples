@@ -1,0 +1,489 @@
+Description: Stack for AWS Cost Services
+
+Resources:
+
+  # This table tracks AWS Usage over time (hourly) for resources that can be Reserved at lower cost.
+  AWSCostUsageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AWSCost
+      AttributeDefinitions:
+      - AttributeName: awsResource
+        AttributeType: S
+      - AttributeName: time
+        AttributeType: S
+      KeySchema:
+      - AttributeName: awsResource
+        KeyType: HASH
+      - AttributeName: time
+        KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 10
+        WriteCapacityUnits: 5
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+  # This table generically tracks Ids to data needed for cost associations.
+  # Example.  EC2 AMIs need to be mapped to the OS running on it for EC2 RIs.
+  AWSCostMapTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AWSCostMap
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 1
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+  AWSCostPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location:
+          Ref: AwsCostPipelineBucket
+        Type: S3
+      RoleArn: !GetAtt LambdaExecutionRole.Arn
+      Stages:
+        - Name: CheckS3Bucket
+          Actions:
+          - Name: CheckS3Bucket
+            ActionTypeId:
+              Category: Source
+              Owner: AWS
+              Version: '1'
+              Provider: S3
+            OutputArtifacts:
+              - Name: RawCode
+            Configuration:
+              S3Bucket: !Ref AwsCostPipelineSourceCodeBucket
+              S3ObjectKey: awscost-bare-repo-files.zip
+            RunOrder: 1
+        - Name: BuildCode
+          Actions:
+          - Name: AwsCostCodeBuild
+            ActionTypeId:
+              Category: Build
+              Owner: AWS
+              Version: '1'
+              Provider: CodeBuild
+            Configuration:
+              ProjectName: !Ref AwsCostLambdaCodeBuild
+            InputArtifacts:
+              - Name: RawCode
+            OutputArtifacts:
+              - Name: LambdaZip
+        - Name: DeployDevLambda
+          Actions:
+          - Name: UpdateDevLambdaAction
+            ActionTypeId:
+              Category: Invoke
+              Owner: AWS
+              Version: '1'
+              Provider: Lambda
+            InputArtifacts:
+              - Name: LambdaZip
+            OutputArtifacts: []
+            Configuration:
+              FunctionName:
+                Ref: UpdateAwsCostDev
+              UserParameters: dev
+            RunOrder: 1
+
+# ToDo: Add a shorter timeout. Make if 4 minutes.
+
+
+  AwsCostPipelineBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: "awscost-pipeline-artifacts"
+      LifecycleConfiguration:
+        Rules:
+        - Id: DeleteObjectsAfter60DaysRule
+          Status: Enabled
+          ExpirationInDays: '60'
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: S3
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+  AwsCostPipelineSourceCodeBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: "awscost-pipeline-source"
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: S3
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+  AwsCostDataBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: "awscost-data"
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: S3
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+  AwsCostLambdaCodeBuild:
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Name: awscost-lambda-build
+      Description: Build python awscost with dependencies
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: py_src/buildspec.yml
+      TimeoutInMinutes: 60
+      ServiceRole: !GetAtt AwsCostCodeBuildRole.Arn
+      Environment:
+        ComputeType: BUILD_GENERAL1_LARGE
+        Image: python:2.7.12
+        Type: LINUX_CONTAINER
+      Artifacts:
+        Type: CODEPIPELINE
+
+  SNSTopicManualApproval:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+      - Endpoint: "asnyder@roku.com"
+        Protocol: email
+      - Endpoint: "asnyder@roku.com"
+        Protocol: email
+
+  # This role is for CodePipeline updates to lambda functions.
+  LambdaExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+            - codepipeline.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - sts:AssumeRole
+            - iam:GetRole
+            - iam:PassRole
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - sts:AssumeRole
+            - iam:GetRole
+            - iam:PassRole
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Effect: Allow
+            Resource: arn:aws:logs:*:*:*
+          - Action:
+            - lambda:*
+            - s3:*
+            - dynamodb:*
+            - codepipeline:*
+            - codebuild:*
+            - pricing:*
+            - sns:Publish
+            - ses:SendRawEmail
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: awscost-pipeline-update-code-policy
+
+  # This role is for CodeBuild commands
+  AwsCostCodeBuildRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Resource:
+            - arn:aws:logs:us-west-2:141602222194:log-group:/aws/codebuild/*
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          - Effect: Allow
+            Resource:
+            - arn:aws:s3:::codepipeline-us-west-2-*
+            Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:GetObjectVersion
+          - Effect: Allow
+            Resource:
+            - arn:aws:s3:::awscost-pipeline-source/awscost-bare-repo-files.zip
+            Action:
+            - s3:List*
+            - s3:GetObject
+            - s3:GetObjectVersion
+          - Effect: Allow
+            Resource:
+            - arn:aws:s3:::awscost-pipeline-source/*
+            - arn:aws:s3:::awscost-code-pipeline-artifacts/*
+            Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            - s3:List*
+            - s3:CreateBucket
+          - Effect: Allow
+            Action:
+            - ssm:GetParameters
+            Resource: arn:aws:ssm:us-west-2:141602222194:parameter/CodeBuild/*
+          - Action:
+            - cloudformation:*
+            - s3:*
+            - apigateway:*
+            - logs:*
+            - iam:*
+            - lambda:*
+            - ec2:*
+            - ce:*
+            Resource: "*"
+            Effect: Allow
+        PolicyName: awscost-lambda-code-build-policy
+
+  AwsCostDevLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: awscost-dev
+      Handler: "awscost_lambda_function.lambda_handler"
+      Code:
+        S3Bucket: !Ref AwsCostPipelineBucket
+        S3Key: "lambda-initial-zipfiles/awscost-lambda.zip"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Description: "Entry point of AwsCost service"
+      Runtime: "python2.7"
+      Timeout: "900"
+      MemorySize: 384
+      Environment:
+        Variables:
+          key: awscost-dev
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: LAMBDA
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+  AwsCostLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: awscost-panda
+      Handler: "panda_lambda_function.lambda_handler"
+      Code:
+        S3Bucket: !Ref AwsCostPipelineBucket
+        S3Key: "lambda-initial-zipfiles/awscost-lambda.zip"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Description: "Entry point of AwsCost service"
+      Runtime: "python2.7"
+      Timeout: "900"
+      MemorySize: 768
+      Environment:
+        Variables:
+          key: awscost-panda
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: LAMBDA
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+#  # Rule AwsCost lambda function CRON rule.
+#  # ToDo move to once per several hours when debugged.
+#  ScheduledRule:
+#    Type: AWS::Events::Rule
+#    Properties:
+#      Description: "ScheduledRule"
+#      ScheduleExpression: "rate(55 minutes)"
+#      State: "ENABLED"
+#      Targets:
+#        -
+#          Arn:
+#            Fn::GetAtt:
+#              - "AwsCostLambdaFunction"
+#              - "Arn"
+#          Id: "TargetFunctionV1"
+#
+#  PermissionForEventsToInvokeLambda:
+#    Type: AWS::Lambda::Permission
+#    Properties:
+#      FunctionName:
+#        Ref: "AwsCostLambdaFunction"
+#      Action: "lambda:InvokeFunction"
+#      Principal: "events.amazonaws.com"
+#      SourceArn:
+#        Fn::GetAtt:
+#          - "ScheduledRule"
+#          - "Arn"
+
+#  # ToDo move to once per several hours when debugged.
+#  ScheduledRuleDev:
+#    Type: AWS::Events::Rule
+#    Properties:
+#      Description: "ScheduledRule"
+#      ScheduleExpression: "rate(55 minutes)"
+#      State: "ENABLED"
+#      Targets:
+#      -
+#        Arn:
+#          Fn::GetAtt:
+#          - "AwsCostDevLambdaFunction"
+#          - "Arn"
+#        Id: "TargetFunctionV1"
+#
+#  PermissionForEventsToInvokeDevLambda:
+#    Type: AWS::Lambda::Permission
+#    Properties:
+#      FunctionName:
+#        Ref: "AwsCostDevLambdaFunction"
+#      Action: "lambda:InvokeFunction"
+#      Principal: "events.amazonaws.com"
+#      SourceArn:
+#        Fn::GetAtt:
+#        - "ScheduledRuleDev"
+#        - "Arn"
+
+  UpdateAwsCostDev:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: awscost-pipeline-deploy-dev
+      Code:
+        S3Bucket: !Ref AwsCostPipelineBucket
+        S3Key: "lambda-initial-zipfiles/awscost-lambda.zip"
+      Handler: awscost-pipeline.lambda_deploy_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python2.7
+      Timeout: '180'
+      Environment:
+        Variables:
+          key: awscost-dev
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: LAMBDA
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+  # The controller works on a CRON schedule and sends events to the
+  # AWSCost-dev
+  AwsCostControllerLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: awscost-controller
+      Handler: "awscost_controller.controller_handler"
+      Code:
+        S3Bucket: !Ref AwsCostPipelineBucket
+        S3Key: "lambda-initial-zipfiles/awscost-lambda.zip"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Description: "Entry point of AwsCost service"
+      Runtime: "python2.7"
+      Timeout: "900"
+      Environment:
+        Variables:
+          key: awscost-dev
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: LAMBDA
+      - Key: Spend_Category
+        Value: AwsCost
+      - Key: Owner
+        Value: CTI-Team
+
+
+  ScheduledRuleCostController:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "ScheduledRule"
+      ScheduleExpression: "rate(10 minutes)"
+      State: "ENABLED"
+      Targets:
+      -
+        Arn:
+          Fn::GetAtt:
+          - "AwsCostControllerLambdaFunction"
+          - "Arn"
+        Id: "TargetFunctionV1"
+
+  PermissionForEventsToInvokeCostControllerLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: "AwsCostControllerLambdaFunction"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
+        Fn::GetAtt:
+        - "ScheduledRuleCostController"
+        - "Arn"
