@@ -1,0 +1,125 @@
+{
+  "version": "36.0.0",
+  "artifacts": {
+    "LokiCdkStack.assets": {
+      "type": "cdk:asset-manifest",
+      "properties": {
+        "file": "LokiCdkStack.assets.json",
+        "requiresBootstrapStackVersion": 6,
+        "bootstrapStackVersionSsmParameter": "/cdk-bootstrap/hnb659fds/version"
+      }
+    },
+    "LokiCdkStack": {
+      "type": "aws:cloudformation:stack",
+      "environment": "aws://123456789012/us-west-2",
+      "properties": {
+        "templateFile": "LokiCdkStack.template.json",
+        "terminationProtection": false,
+        "validateOnSynth": false,
+        "assumeRoleArn": "arn:${AWS::Partition}:iam::123456789012:role/cdk-hnb659fds-deploy-role-123456789012-us-west-2",
+        "cloudFormationExecutionRoleArn": "arn:${AWS::Partition}:iam::123456789012:role/cdk-hnb659fds-cfn-exec-role-123456789012-us-west-2",
+        "stackTemplateAssetObjectUrl": "s3://cdk-hnb659fds-assets-123456789012-us-west-2/2ca14c086950140fb8c063f3ba3108920340eedceb1456ecb7d62937d099d23c.json",
+        "requiresBootstrapStackVersion": 6,
+        "bootstrapStackVersionSsmParameter": "/cdk-bootstrap/hnb659fds/version",
+        "additionalDependencies": [
+          "LokiCdkStack.assets"
+        ],
+        "lookupRole": {
+          "arn": "arn:${AWS::Partition}:iam::123456789012:role/cdk-hnb659fds-lookup-role-123456789012-us-west-2",
+          "requiresBootstrapStackVersion": 8,
+          "bootstrapStackVersionSsmParameter": "/cdk-bootstrap/hnb659fds/version"
+        }
+      },
+      "dependencies": [
+        "LokiCdkStack.assets"
+      ],
+      "metadata": {
+        "/LokiCdkStack/loki-s3-storage-test/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "lokis3storagetestA49D8BD7"
+          }
+        ],
+        "/LokiCdkStack/loki-index-text/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "lokiindextext65CC1D60"
+          }
+        ],
+        "/LokiCdkStack/GrafanaPublicEc2SecurityGroup/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "GrafanaPublicEc2SecurityGroupCB29F781"
+          }
+        ],
+        "/LokiCdkStack/GrafanaInstanceRole/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "GrafanaInstanceRoleF6FFEE60"
+          }
+        ],
+        "/LokiCdkStack/GrafanaLokiServer/InstanceProfile": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "GrafanaLokiServerInstanceProfile6D16FABC"
+          }
+        ],
+        "/LokiCdkStack/GrafanaLokiServer/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "GrafanaLokiServer070362F1"
+          }
+        ],
+        "/LokiCdkStack/SsmParameterValue:--aws--service--ami-amazon-linux-latest--amzn2-ami-hvm-x86_64-gp2:C96584B6-F00A-464E-AD19-53AFF4B05118.Parameter": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "SsmParameterValueawsserviceamiamazonlinuxlatestamzn2amihvmx8664gp2C96584B6F00A464EAD1953AFF4B05118Parameter"
+          }
+        ],
+        "/LokiCdkStack/loki_push_logs_url": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "lokipushlogsurl"
+          }
+        ],
+        "/LokiCdkStack/loki-s3-bucket": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "lokis3bucket"
+          }
+        ],
+        "/LokiCdkStack/loki-index-dynamo-table": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "lokiindexdynamotable"
+          }
+        ],
+        "/LokiCdkStack/CDKMetadata/Default": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "CDKMetadata"
+          }
+        ],
+        "/LokiCdkStack/BootstrapVersion": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "BootstrapVersion"
+          }
+        ],
+        "/LokiCdkStack/CheckBootstrapVersion": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "CheckBootstrapVersion"
+          }
+        ]
+      },
+      "displayName": "LokiCdkStack"
+    },
+    "Tree": {
+      "type": "cdk:tree",
+      "properties": {
+        "file": "tree.json"
+      }
+    }
+  }
+}

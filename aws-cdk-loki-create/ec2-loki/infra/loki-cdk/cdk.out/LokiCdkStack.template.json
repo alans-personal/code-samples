@@ -1,0 +1,279 @@
+{
+ "Resources": {
+  "lokis3storagetestA49D8BD7": {
+   "Type": "AWS::S3::Bucket",
+   "Properties": {
+    "BucketName": "loki-s3-storage-test"
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "LokiCdkStack/loki-s3-storage-test/Resource"
+   }
+  },
+  "lokiindextext65CC1D60": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "id",
+      "KeyType": "HASH"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "LokiCdkStack/loki-index-text/Resource"
+   }
+  },
+  "GrafanaPublicEc2SecurityGroupCB29F781": {
+   "Type": "AWS::EC2::SecurityGroup",
+   "Properties": {
+    "GroupDescription": "LokiCdkStack/GrafanaPublicEc2SecurityGroup",
+    "SecurityGroupEgress": [
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow all outbound traffic by default",
+      "IpProtocol": "-1"
+     }
+    ],
+    "SecurityGroupIngress": [
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "SSH access from anywhere",
+      "FromPort": 22,
+      "IpProtocol": "tcp",
+      "ToPort": 22
+     },
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "HTTP access from anywhere",
+      "FromPort": 80,
+      "IpProtocol": "tcp",
+      "ToPort": 80
+     },
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Grafana port access from anywhere",
+      "FromPort": 3000,
+      "IpProtocol": "tcp",
+      "ToPort": 3000
+     },
+     {
+      "CidrIp": "10.0.0.0/16",
+      "Description": "Loki port access from anywhere",
+      "FromPort": 3100,
+      "IpProtocol": "tcp",
+      "ToPort": 3100
+     }
+    ],
+    "VpcId": "vpc-0c15d73d7a3968763"
+   },
+   "Metadata": {
+    "aws:cdk:path": "LokiCdkStack/GrafanaPublicEc2SecurityGroup/Resource"
+   }
+  },
+  "GrafanaInstanceRoleF6FFEE60": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "ec2.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "Description": "Role for Grafana EC2 Instance, grants EC2, S3 and DynamoDB access",
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/AmazonEC2FullAccess"
+       ]
+      ]
+     },
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/AmazonS3FullAccess"
+       ]
+      ]
+     },
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/AmazonDynamoDBFullAccess"
+       ]
+      ]
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "LokiCdkStack/GrafanaInstanceRole/Resource"
+   }
+  },
+  "GrafanaLokiServerInstanceProfile6D16FABC": {
+   "Type": "AWS::IAM::InstanceProfile",
+   "Properties": {
+    "Roles": [
+     {
+      "Ref": "GrafanaInstanceRoleF6FFEE60"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "LokiCdkStack/GrafanaLokiServer/InstanceProfile"
+   }
+  },
+  "GrafanaLokiServer070362F1": {
+   "Type": "AWS::EC2::Instance",
+   "Properties": {
+    "AvailabilityZone": "us-west-2a",
+    "IamInstanceProfile": {
+     "Ref": "GrafanaLokiServerInstanceProfile6D16FABC"
+    },
+    "ImageId": {
+     "Ref": "SsmParameterValueawsserviceamiamazonlinuxlatestamzn2amihvmx8664gp2C96584B6F00A464EAD1953AFF4B05118Parameter"
+    },
+    "InstanceType": "t2.micro",
+    "KeyName": "fintech-us-west-2-key",
+    "SecurityGroupIds": [
+     {
+      "Fn::GetAtt": [
+       "GrafanaPublicEc2SecurityGroupCB29F781",
+       "GroupId"
+      ]
+     }
+    ],
+    "SubnetId": "subnet-02b454a4e3e67e1b4",
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "LokiCdkStack/GrafanaLokiServer"
+     }
+    ],
+    "UserData": {
+     "Fn::Base64": "#!/bin/bash\n\n########## UserData exclusively for Grafana Loki EC2 Instance #########\n\n### update yum ###\nsudo yum update -y\n\n### Install Grafana 10.4 stable release 03/2024 ###\nsudo yum install -y https://dl.grafana.com/oss/release/grafana-10.4.1-1.x86_64.rpm\nsudo systemctl daemon-reload\nsudo systemctl start grafana-server\nsudo systemctl enable grafana-server.service\n\n### Install docker for EC2 Instance for Loki ###\nsudo amazon-linux-extras install -y docker\nsudo systemctl start docker\nsudo systemctl enable docker\n\n### Install docker-compose for Loki ###\nsudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose\nsudo chmod +x /usr/local/bin/docker-compose\n# docker-compose version     ## output this to a file.\n\n### Install Loki - Docker version ###\nmkdir -p /srv/loki\ncd /srv/loki || exit 1\n\nwget https://raw.githubusercontent.com/grafana/loki/v2.9.4/cmd/loki/loki-local-config.yaml -O loki-config.yaml\nsudo docker run --name loki -d -v $(pwd):/mnt/config -p 3100:3100 grafana/loki:2.9.4 -config.file=/mnt/config/loki-config.yaml\n\ncd -\n\n### NOTE: We need to edit the Loki config file to loki-config.yaml file ###\n\n### Install Loki ###\n# wget https://github.com/grafana/loki/releases/download/v2.5.0/loki-linux-amd64.zip\n# unzip loki-linux-amd64.zip\n# sudo mv loki-linux-amd64/loki /usr/local/bin/\n# sudo chmod +x /usr/local/bin/loki\n\n### Following this we would need to make Loki run under systemctl ###\n\n"
+    }
+   },
+   "DependsOn": [
+    "GrafanaInstanceRoleF6FFEE60"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "LokiCdkStack/GrafanaLokiServer/Resource"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/1WOuQ7CMBBEvyW9s+Qo6KFAVESBHjnORphgO/IhFFn+d+xELqh2dp5mNA3UbQ1VQb+mZONcfvgA/m4pm0mPRjnNkET29KYFf3JsRkvOk9xVIOMqqVBjzDzo8MGENhEIsiYWIXOa2/WilVsS/Deu0lgq2RbLOhBOBfhe7W35ZtxpNfHYH5LZUU0FWtTpuTm7uG1cHh5It9qXkocW6gqOxdtwXmonLRcI/X5/uJ4NXwABAAA="
+   },
+   "Metadata": {
+    "aws:cdk:path": "LokiCdkStack/CDKMetadata/Default"
+   }
+  }
+ },
+ "Parameters": {
+  "SsmParameterValueawsserviceamiamazonlinuxlatestamzn2amihvmx8664gp2C96584B6F00A464EAD1953AFF4B05118Parameter": {
+   "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+   "Default": "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+  },
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Outputs": {
+  "lokipushlogsurl": {
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      {
+       "Fn::GetAtt": [
+        "GrafanaLokiServer070362F1",
+        "PrivateIp"
+       ]
+      },
+      ":3100"
+     ]
+    ]
+   },
+   "Export": {
+    "Name": "loki-push-logs-url"
+   }
+  },
+  "lokis3bucket": {
+   "Value": {
+    "Ref": "lokis3storagetestA49D8BD7"
+   },
+   "Export": {
+    "Name": "loki-s3-bucket"
+   }
+  },
+  "lokiindexdynamotable": {
+   "Value": {
+    "Ref": "lokiindextext65CC1D60"
+   },
+   "Export": {
+    "Name": "loki-index-dynamo-table"
+   }
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

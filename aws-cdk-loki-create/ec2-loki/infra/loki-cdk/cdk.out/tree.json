@@ -1,0 +1,419 @@
+{
+  "version": "tree-0.1",
+  "tree": {
+    "id": "App",
+    "path": "",
+    "children": {
+      "LokiCdkStack": {
+        "id": "LokiCdkStack",
+        "path": "LokiCdkStack",
+        "children": {
+          "SatVPC": {
+            "id": "SatVPC",
+            "path": "LokiCdkStack/SatVPC",
+            "children": {
+              "PublicSubnetSubnet1": {
+                "id": "PublicSubnetSubnet1",
+                "path": "LokiCdkStack/SatVPC/PublicSubnetSubnet1",
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.Resource",
+                  "version": "2.131.0"
+                }
+              },
+              "PublicSubnetSubnet2": {
+                "id": "PublicSubnetSubnet2",
+                "path": "LokiCdkStack/SatVPC/PublicSubnetSubnet2",
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.Resource",
+                  "version": "2.131.0"
+                }
+              }
+            },
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.Resource",
+              "version": "2.131.0"
+            }
+          },
+          "loki-s3-storage-test": {
+            "id": "loki-s3-storage-test",
+            "path": "LokiCdkStack/loki-s3-storage-test",
+            "children": {
+              "Resource": {
+                "id": "Resource",
+                "path": "LokiCdkStack/loki-s3-storage-test/Resource",
+                "attributes": {
+                  "aws:cdk:cloudformation:type": "AWS::S3::Bucket",
+                  "aws:cdk:cloudformation:props": {
+                    "bucketName": "loki-s3-storage-test"
+                  }
+                },
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.aws_s3.CfnBucket",
+                  "version": "2.131.0"
+                }
+              }
+            },
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.aws_s3.Bucket",
+              "version": "2.131.0"
+            }
+          },
+          "loki-index-text": {
+            "id": "loki-index-text",
+            "path": "LokiCdkStack/loki-index-text",
+            "children": {
+              "Resource": {
+                "id": "Resource",
+                "path": "LokiCdkStack/loki-index-text/Resource",
+                "attributes": {
+                  "aws:cdk:cloudformation:type": "AWS::DynamoDB::Table",
+                  "aws:cdk:cloudformation:props": {
+                    "attributeDefinitions": [
+                      {
+                        "attributeName": "id",
+                        "attributeType": "S"
+                      }
+                    ],
+                    "billingMode": "PAY_PER_REQUEST",
+                    "keySchema": [
+                      {
+                        "attributeName": "id",
+                        "keyType": "HASH"
+                      }
+                    ]
+                  }
+                },
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.aws_dynamodb.CfnTable",
+                  "version": "2.131.0"
+                }
+              },
+              "ScalingRole": {
+                "id": "ScalingRole",
+                "path": "LokiCdkStack/loki-index-text/ScalingRole",
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.Resource",
+                  "version": "2.131.0"
+                }
+              }
+            },
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.aws_dynamodb.Table",
+              "version": "2.131.0"
+            }
+          },
+          "GrafanaPublicEc2SecurityGroup": {
+            "id": "GrafanaPublicEc2SecurityGroup",
+            "path": "LokiCdkStack/GrafanaPublicEc2SecurityGroup",
+            "children": {
+              "Resource": {
+                "id": "Resource",
+                "path": "LokiCdkStack/GrafanaPublicEc2SecurityGroup/Resource",
+                "attributes": {
+                  "aws:cdk:cloudformation:type": "AWS::EC2::SecurityGroup",
+                  "aws:cdk:cloudformation:props": {
+                    "groupDescription": "LokiCdkStack/GrafanaPublicEc2SecurityGroup",
+                    "securityGroupEgress": [
+                      {
+                        "cidrIp": "0.0.0.0/0",
+                        "description": "Allow all outbound traffic by default",
+                        "ipProtocol": "-1"
+                      }
+                    ],
+                    "securityGroupIngress": [
+                      {
+                        "cidrIp": "0.0.0.0/0",
+                        "ipProtocol": "tcp",
+                        "fromPort": 22,
+                        "toPort": 22,
+                        "description": "SSH access from anywhere"
+                      },
+                      {
+                        "cidrIp": "0.0.0.0/0",
+                        "ipProtocol": "tcp",
+                        "fromPort": 80,
+                        "toPort": 80,
+                        "description": "HTTP access from anywhere"
+                      },
+                      {
+                        "cidrIp": "0.0.0.0/0",
+                        "ipProtocol": "tcp",
+                        "fromPort": 3000,
+                        "toPort": 3000,
+                        "description": "Grafana port access from anywhere"
+                      },
+                      {
+                        "cidrIp": "10.0.0.0/16",
+                        "ipProtocol": "tcp",
+                        "fromPort": 3100,
+                        "toPort": 3100,
+                        "description": "Loki port access from anywhere"
+                      }
+                    ],
+                    "vpcId": "vpc-0c15d73d7a3968763"
+                  }
+                },
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.aws_ec2.CfnSecurityGroup",
+                  "version": "2.131.0"
+                }
+              }
+            },
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.aws_ec2.SecurityGroup",
+              "version": "2.131.0"
+            }
+          },
+          "GrafanaInstanceRole": {
+            "id": "GrafanaInstanceRole",
+            "path": "LokiCdkStack/GrafanaInstanceRole",
+            "children": {
+              "ImportGrafanaInstanceRole": {
+                "id": "ImportGrafanaInstanceRole",
+                "path": "LokiCdkStack/GrafanaInstanceRole/ImportGrafanaInstanceRole",
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.Resource",
+                  "version": "2.131.0"
+                }
+              },
+              "Resource": {
+                "id": "Resource",
+                "path": "LokiCdkStack/GrafanaInstanceRole/Resource",
+                "attributes": {
+                  "aws:cdk:cloudformation:type": "AWS::IAM::Role",
+                  "aws:cdk:cloudformation:props": {
+                    "assumeRolePolicyDocument": {
+                      "Statement": [
+                        {
+                          "Action": "sts:AssumeRole",
+                          "Effect": "Allow",
+                          "Principal": {
+                            "Service": "ec2.amazonaws.com"
+                          }
+                        }
+                      ],
+                      "Version": "2012-10-17"
+                    },
+                    "description": "Role for Grafana EC2 Instance, grants EC2, S3 and DynamoDB access",
+                    "managedPolicyArns": [
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "arn:",
+                            {
+                              "Ref": "AWS::Partition"
+                            },
+                            ":iam::aws:policy/AmazonEC2FullAccess"
+                          ]
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "arn:",
+                            {
+                              "Ref": "AWS::Partition"
+                            },
+                            ":iam::aws:policy/AmazonS3FullAccess"
+                          ]
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "arn:",
+                            {
+                              "Ref": "AWS::Partition"
+                            },
+                            ":iam::aws:policy/AmazonDynamoDBFullAccess"
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.aws_iam.CfnRole",
+                  "version": "2.131.0"
+                }
+              }
+            },
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.aws_iam.Role",
+              "version": "2.131.0"
+            }
+          },
+          "FinTechUSWest2KeyPair": {
+            "id": "FinTechUSWest2KeyPair",
+            "path": "LokiCdkStack/FinTechUSWest2KeyPair",
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.Resource",
+              "version": "2.131.0"
+            }
+          },
+          "GrafanaLokiServer": {
+            "id": "GrafanaLokiServer",
+            "path": "LokiCdkStack/GrafanaLokiServer",
+            "children": {
+              "InstanceProfile": {
+                "id": "InstanceProfile",
+                "path": "LokiCdkStack/GrafanaLokiServer/InstanceProfile",
+                "attributes": {
+                  "aws:cdk:cloudformation:type": "AWS::IAM::InstanceProfile",
+                  "aws:cdk:cloudformation:props": {
+                    "roles": [
+                      {
+                        "Ref": "GrafanaInstanceRoleF6FFEE60"
+                      }
+                    ]
+                  }
+                },
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.aws_iam.CfnInstanceProfile",
+                  "version": "2.131.0"
+                }
+              },
+              "Resource": {
+                "id": "Resource",
+                "path": "LokiCdkStack/GrafanaLokiServer/Resource",
+                "attributes": {
+                  "aws:cdk:cloudformation:type": "AWS::EC2::Instance",
+                  "aws:cdk:cloudformation:props": {
+                    "availabilityZone": "us-west-2a",
+                    "iamInstanceProfile": {
+                      "Ref": "GrafanaLokiServerInstanceProfile6D16FABC"
+                    },
+                    "imageId": {
+                      "Ref": "SsmParameterValueawsserviceamiamazonlinuxlatestamzn2amihvmx8664gp2C96584B6F00A464EAD1953AFF4B05118Parameter"
+                    },
+                    "instanceType": "t2.micro",
+                    "keyName": "fintech-us-west-2-key",
+                    "securityGroupIds": [
+                      {
+                        "Fn::GetAtt": [
+                          "GrafanaPublicEc2SecurityGroupCB29F781",
+                          "GroupId"
+                        ]
+                      }
+                    ],
+                    "subnetId": "subnet-02b454a4e3e67e1b4",
+                    "tags": [
+                      {
+                        "key": "Name",
+                        "value": "LokiCdkStack/GrafanaLokiServer"
+                      }
+                    ],
+                    "userData": {
+                      "Fn::Base64": "#!/bin/bash\n\n########## UserData exclusively for Grafana Loki EC2 Instance #########\n\n### update yum ###\nsudo yum update -y\n\n### Install Grafana 10.4 stable release 03/2024 ###\nsudo yum install -y https://dl.grafana.com/oss/release/grafana-10.4.1-1.x86_64.rpm\nsudo systemctl daemon-reload\nsudo systemctl start grafana-server\nsudo systemctl enable grafana-server.service\n\n### Install docker for EC2 Instance for Loki ###\nsudo amazon-linux-extras install -y docker\nsudo systemctl start docker\nsudo systemctl enable docker\n\n### Install docker-compose for Loki ###\nsudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose\nsudo chmod +x /usr/local/bin/docker-compose\n# docker-compose version     ## output this to a file.\n\n### Install Loki - Docker version ###\nmkdir -p /srv/loki\ncd /srv/loki || exit 1\n\nwget https://raw.githubusercontent.com/grafana/loki/v2.9.4/cmd/loki/loki-local-config.yaml -O loki-config.yaml\nsudo docker run --name loki -d -v $(pwd):/mnt/config -p 3100:3100 grafana/loki:2.9.4 -config.file=/mnt/config/loki-config.yaml\n\ncd -\n\n### NOTE: We need to edit the Loki config file to loki-config.yaml file ###\n\n### Install Loki ###\n# wget https://github.com/grafana/loki/releases/download/v2.5.0/loki-linux-amd64.zip\n# unzip loki-linux-amd64.zip\n# sudo mv loki-linux-amd64/loki /usr/local/bin/\n# sudo chmod +x /usr/local/bin/loki\n\n### Following this we would need to make Loki run under systemctl ###\n\n"
+                    }
+                  }
+                },
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.aws_ec2.CfnInstance",
+                  "version": "2.131.0"
+                }
+              }
+            },
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.aws_ec2.Instance",
+              "version": "2.131.0"
+            }
+          },
+          "SsmParameterValue:--aws--service--ami-amazon-linux-latest--amzn2-ami-hvm-x86_64-gp2:C96584B6-F00A-464E-AD19-53AFF4B05118.Parameter": {
+            "id": "SsmParameterValue:--aws--service--ami-amazon-linux-latest--amzn2-ami-hvm-x86_64-gp2:C96584B6-F00A-464E-AD19-53AFF4B05118.Parameter",
+            "path": "LokiCdkStack/SsmParameterValue:--aws--service--ami-amazon-linux-latest--amzn2-ami-hvm-x86_64-gp2:C96584B6-F00A-464E-AD19-53AFF4B05118.Parameter",
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.CfnParameter",
+              "version": "2.131.0"
+            }
+          },
+          "SsmParameterValue:--aws--service--ami-amazon-linux-latest--amzn2-ami-hvm-x86_64-gp2:C96584B6-F00A-464E-AD19-53AFF4B05118": {
+            "id": "SsmParameterValue:--aws--service--ami-amazon-linux-latest--amzn2-ami-hvm-x86_64-gp2:C96584B6-F00A-464E-AD19-53AFF4B05118",
+            "path": "LokiCdkStack/SsmParameterValue:--aws--service--ami-amazon-linux-latest--amzn2-ami-hvm-x86_64-gp2:C96584B6-F00A-464E-AD19-53AFF4B05118",
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.Resource",
+              "version": "2.131.0"
+            }
+          },
+          "loki_push_logs_url": {
+            "id": "loki_push_logs_url",
+            "path": "LokiCdkStack/loki_push_logs_url",
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.CfnOutput",
+              "version": "2.131.0"
+            }
+          },
+          "loki-s3-bucket": {
+            "id": "loki-s3-bucket",
+            "path": "LokiCdkStack/loki-s3-bucket",
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.CfnOutput",
+              "version": "2.131.0"
+            }
+          },
+          "loki-index-dynamo-table": {
+            "id": "loki-index-dynamo-table",
+            "path": "LokiCdkStack/loki-index-dynamo-table",
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.CfnOutput",
+              "version": "2.131.0"
+            }
+          },
+          "CDKMetadata": {
+            "id": "CDKMetadata",
+            "path": "LokiCdkStack/CDKMetadata",
+            "children": {
+              "Default": {
+                "id": "Default",
+                "path": "LokiCdkStack/CDKMetadata/Default",
+                "constructInfo": {
+                  "fqn": "aws-cdk-lib.CfnResource",
+                  "version": "2.131.0"
+                }
+              }
+            },
+            "constructInfo": {
+              "fqn": "constructs.Construct",
+              "version": "10.3.0"
+            }
+          },
+          "BootstrapVersion": {
+            "id": "BootstrapVersion",
+            "path": "LokiCdkStack/BootstrapVersion",
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.CfnParameter",
+              "version": "2.131.0"
+            }
+          },
+          "CheckBootstrapVersion": {
+            "id": "CheckBootstrapVersion",
+            "path": "LokiCdkStack/CheckBootstrapVersion",
+            "constructInfo": {
+              "fqn": "aws-cdk-lib.CfnRule",
+              "version": "2.131.0"
+            }
+          }
+        },
+        "constructInfo": {
+          "fqn": "aws-cdk-lib.Stack",
+          "version": "2.131.0"
+        }
+      },
+      "Tree": {
+        "id": "Tree",
+        "path": "Tree",
+        "constructInfo": {
+          "fqn": "constructs.Construct",
+          "version": "10.3.0"
+        }
+      }
+    },
+    "constructInfo": {
+      "fqn": "aws-cdk-lib.App",
+      "version": "2.131.0"
+    }
+  }
+}

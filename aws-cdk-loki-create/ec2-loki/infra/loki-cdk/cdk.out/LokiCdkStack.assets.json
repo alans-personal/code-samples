@@ -1,0 +1,20 @@
+{
+  "version": "36.0.0",
+  "files": {
+    "2ca14c086950140fb8c063f3ba3108920340eedceb1456ecb7d62937d099d23c": {
+      "source": {
+        "path": "LokiCdkStack.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "123456789012-us-west-2": {
+          "bucketName": "cdk-hnb659fds-assets-123456789012-us-west-2",
+          "objectKey": "2ca14c086950140fb8c063f3ba3108920340eedceb1456ecb7d62937d099d23c.json",
+          "region": "us-west-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::123456789012:role/cdk-hnb659fds-file-publishing-role-123456789012-us-west-2"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}
