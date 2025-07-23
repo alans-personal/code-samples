@@ -1,0 +1,191 @@
+Description: Build Number Service
+
+Resources:
+
+  BuildNumbersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: BuildNumbers
+      AttributeDefinitions:
+      - AttributeName: serviceName
+        AttributeType: S
+      KeySchema:
+      - AttributeName: serviceName
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+
+  BuildHistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: BuildHistory
+      AttributeDefinitions:
+      - AttributeName: serviceName
+        AttributeType: S
+      - AttributeName: date
+        AttributeType: S
+      KeySchema:
+      - AttributeName: serviceName
+        KeyType: HASH
+      - AttributeName: date
+        KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+
+  GardenerLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: build-number-service
+      Handler: "index.handler"
+      Code:
+        ZipFile: !Sub |
+          from __future__ import print_function
+          import boto3
+          import datetime
+
+          DYNAMODB = boto3.resource('dynamodb')
+          BUILD_NUMBERS_TABLE = DYNAMODB.Table('BuildNumbers')
+          BUILD_HISTORY_TABLE = DYNAMODB.Table('BuildHistory')
+
+
+          def handler(event, context):
+              """
+              Get an update the build number for a service and write to history table
+              :param event:
+              :param context:
+              :return: build number on success or ERROR: ... on failure
+              """
+              service_name = event.get('service')
+              user = event.get('user')
+              if not service_name or not user:
+                return 'ERROR: Missing "service" or "user".'
+
+              print('service: {}  user: {}'.format(service_name, user))
+
+              try:
+                response = BUILD_NUMBERS_TABLE.get_item(
+                    Key={
+                        'serviceName': service_name
+                    }
+                )
+                print('response: {}'.format(response))
+                item = response.get('Item')
+                print('Item: {}'.format(item))
+              except Exception as e:
+                return 'ERROR: Item not found. {}'.format(e.message)
+              else:
+                if not item:
+                  # Create new entry.
+                  response = BUILD_NUMBERS_TABLE.put_item(
+                    Item={
+                      'serviceName': service_name,
+                      'buildNumber': 1,
+                      'createdBy': user
+                    }
+                  )
+                  build_number = 1
+                else:
+                  build_number = item.get('buildNumber')
+
+                if not build_number:
+                  build_number = 1
+
+                new_build_number = build_number+1
+
+                BUILD_NUMBERS_TABLE.update_item(
+                  Key={'serviceName': service_name},
+                  UpdateExpression="set buildNumber = :b",
+                  ExpressionAttributeValues={
+                    ':b': new_build_number
+                  },
+                  ReturnValues="UPDATED_NEW"
+                )
+
+                date_now = (datetime.datetime.now()).strftime('%Y%m%d-%H%M%S')
+                BUILD_HISTORY_TABLE.put_item(
+                    Item={
+                        'serviceName': service_name,
+                        'buildNumber': build_number,
+                        'date': date_now,
+                        'user': user
+                    }
+                )
+
+                return build_number
+
+
+
+      Role: !GetAtt BuildNumberExecutionRole.Arn
+      Description: "Build Number Service"
+      Runtime: "python2.7"
+      Timeout: "5"
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+
+  BuildNumberExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - sts:AssumeRole
+            - iam:GetRole
+            - iam:PassRole
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Effect: Allow
+            Resource: arn:aws:logs:*:*:*
+          - Action:
+            - lambda:*
+            - dynamodb:*
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: py-gardener-pipeline-update-code-policy
+
+# ToDo: Minimize permissions of BuildNumberExecutionRole
+# ToDo: Export the BuildNumberExecutionRole: for inclusion by other stacks
+#Outputs:
+

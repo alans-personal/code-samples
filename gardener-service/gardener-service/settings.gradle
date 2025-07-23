@@ -1,0 +1,4 @@
+rootProject.name = 'gardener-service'
+include 'api'
+
+project(':api').name = 'gardener-service-api'

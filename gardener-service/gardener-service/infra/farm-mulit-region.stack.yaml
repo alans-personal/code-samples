@@ -1,0 +1,37 @@
+Description: Farm Resources need in multiple AWS regions.
+
+# Parameters:
+
+Resources:
+
+  # FarmEnv table is used to store Farm and Service startup parameters.
+  FarmEnvTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: FarmEnv
+      AttributeDefinitions:
+      - AttributeName: farmName
+        AttributeType: S
+      - AttributeName: service
+        AttributeType: S
+      KeySchema:
+      - AttributeName: farmName
+        KeyType: HASH
+      - AttributeName: service
+        KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 2
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team

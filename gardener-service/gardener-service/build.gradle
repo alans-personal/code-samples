@@ -1,0 +1,26 @@
+allprojects {
+    group 'com.asnyder'
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'idea'
+
+    sourceCompatibility = 1.8
+
+    //project.ext.artifactoryHost = 'artifactory.ctidev.asnyder.com'
+    //project.ext.artifactoryHost = 'artifactory.push.tools.asnyder.com'
+    project.ext.artifactoryHost = 'artifactory.tools.asnyder.com'
+
+    repositories {
+        mavenCentral()
+        maven { url "http://${project.ext.artifactoryHost}/artifactory/libs-release-local" }
+        maven { url "http://${project.ext.artifactoryHost}/artifactory/sr-lib-release-local" }
+        maven { url "http://${project.ext.artifactoryHost}/artifactory/sr-ext-lib" }
+    }
+
+    dependencies {
+
+    }
+
+}

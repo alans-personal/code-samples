@@ -1,0 +1,54 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo INSTALL phase...
+      - echo Build started on `date`
+      - apt-get update -y
+      - echo Adding latest available version of pip.
+      - pip install --upgrade pip
+      - echo Installing AWS CLI
+      - pip install awscli --upgrade
+      - echo Adding code dependencies for project
+      - mkdir ./py_src/py_src
+      - pip install requests_aws_sign -t ./py_src/py_src
+      - pip install requests -t ./py_src/py_src
+      - pip install pendulum -t ./py_src/py_src
+
+
+  pre_build:
+    commands:
+      - echo PRE_BUILD phase... verifying state
+      - echo `which python`
+      - echo `python --version`
+      - echo `aws --version`
+  build:
+    commands:
+      - echo BUILD phase...
+      - echo Create build_info file.
+      - cd ./py_src
+      - echo `pwd`
+      - echo `ls`
+#      - echo Get githook_info.txt file from S3
+#      - aws s3 cp s3://gardener-pipeline-source/githook_info.txt githook_info.txt
+      - echo Building
+      - cp *.py ./py_src
+      - cp *.txt ./py_src
+      - mkdir ./py_src/util
+      - cp ./util/*.py ./py_src/util
+      - echo `pwd`
+      - echo `ls`
+      - echo `python gardener-pipeline.py`
+#      - cp build_info.txt ./util
+#      - aws s3 cp build_info.txt s3://gardener-pipeline-source
+  post_build:
+    commands:
+      - echo POST_BUILD phase...
+      - echo Run unit tests
+      - echo `pwd`
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: py_src/py_src

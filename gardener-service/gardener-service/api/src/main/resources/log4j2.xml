@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration packages="asnyder.com">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{ISO8601} | %t | %p | %c:%L | %m%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="com.netflix.config" level="warn" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+        </Root>
+        <!-- Gardener log config -->
+        <Appenders>
+            <File name="GardnerLog" fileName="/home/ec2-user/logs/gardener.log">
+                <PatternLayout>
+                    <Pattern>%d %p %c{1.} [%t] %m%n</Pattern>
+                </PatternLayout>
+            </File>
+        </Appenders>
+        <Loggers>
+            <Root level="info">
+                <AppenderRef ref="GardnerLog"/>
+            </Root>
+        </Loggers>
+    </Loggers>
+</Configuration>

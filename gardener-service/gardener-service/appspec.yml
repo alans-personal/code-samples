@@ -1,0 +1,22 @@
+version: 0.0
+os: linux
+files:
+  - source: api/build/distributions/gardener-service-api.zip
+    destination: /home/ec2-user
+  - source: api/resources/log4j2.xml
+    destination: /home/ec2-user
+  - source: scripts/gardener
+    destination: /etc/init.d
+hooks:
+  BeforeInstall:
+    - location: scripts/codedeploy_java_before_install.sh
+  AfterInstall:
+    - location: scripts/codedeploy_java_after_install.sh
+      timeout: 180
+  ApplicationStart:
+    - location: scripts/codedeploy_java_application_start.sh
+      timeout: 3600
+  ValidateService:
+    - location: scripts/codedeploy_java_validate_service.sh
+      timeout: 3600
+#      runas: codedeployuser

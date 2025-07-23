@@ -1,0 +1,28 @@
+#!/bin/bash
+
+case "$1" in
+start)
+   /home/ec2-user/gardener-service-api/bin/gardener-service-api &
+   echo $!>/var/run/gardener.pid
+   ;;
+stop)
+   sudo kill `cat /var/run/gardener.pid`
+   sudo rm /var/run/gardener.pid
+   ;;
+restart)
+   $0 stop
+   $0 start
+   ;;
+status)
+   if [ -e /var/run/gardener.pid ]; then
+      echo gardener service is running, pid=`cat /var/run/gardener.pid`
+   else
+      echo Gardener service is NOT running
+      exit 1
+   fi
+   ;;
+*)
+   echo "Usage: $0 {start|stop|status|restart}"
+esac
+
+exit 0

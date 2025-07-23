@@ -1,0 +1,89 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo INSTALL phase...
+
+      # Don't know java build image has awscli or gradle by default. If they don't then
+      # uncomment the following to install them.
+      - apt-get update -y
+      - apt-get install gradle -y
+# if you need AWS CLI
+#      - apt-get install python-pip python-dev build-essential
+#      - echo `which pip`
+#      - pip install --upgrade pip
+#      - echo Installing AWS CLI
+#      - pip install awscli --upgrade
+
+  pre_build:
+    commands:
+      - echo PRE_BUILD phase... verifying state
+      - echo `which java`
+      - echo Expecting java 1.8 or later
+      - echo `java -version`
+      - echo Checking for AWSCLI
+      - echo `which aws`
+#      - echo `aws --version`
+      - echo Checking for gradle
+      - echo `which gradle`
+      - echo `gradle -version`
+      - echo Linux distro
+      - echo `uname -a`
+      - echo Do we have SDK package manager?
+      - echo `which sdk`
+      - echo See if we can upgrade gradle version
+#      - mkdir mkdir /opt/gradle
+      - echo `wget --version`
+      - echo `wget -help`
+      - wget https://services.gradle.org/distributions/gradle-4.8.1-bin.zip
+      - unzip -d /opt/gradle gradle-4.8.1-bin.zip
+      - export PATH=$PATH:/opt/gradle/gradle-4.8.1/bin
+      - echo Has gradle version changed?
+      - echo `which gradle`
+  build:
+    commands:
+      - echo BUILD phase...
+      - echo Build started on `date`
+#      - gradle build
+      - echo `/opt/gradle/gradle-4.8.1/bin/gradle -version`
+      - /opt/gradle/gradle-4.8.1/bin/gradle build
+  post_build:
+    commands:
+      - echo POST_BUILD phase...
+      - echo Build completed on `date`
+      - echo `pwd`
+      - echo Verify location of artifacts
+      - echo `ls`
+      - cd api
+      - echo `ls`
+      - cd build
+      - echo `ls`
+      - cd libs
+      - echo `ls`
+      - cd ../distributions
+      - echo `ls`
+      - cd ../..
+      - echo `pwd`
+      - echo `ls`
+      - cd resources
+      - echo `ls`
+
+      # If we need to move any files back to S3 or finalize the build number do those calls here.
+      # If we want to run any tests do that here also, can put results into s3 bucket
+      # and have lambda function further down the pipeline verify the result.
+
+artifacts:
+  # This zip file is expected to contain the
+  files:
+    - api/build/libs/gardener-service-api.jar
+    - api/build/distributions/gardener-service-api.zip
+    - api/build/scripts/gardener-service-api
+    - api/build/scripts/gardener-service-api.bat
+    - api/resources/log4j2.xml
+    - scripts/codedeploy_java_after_install.sh
+    - scripts/codedeploy_java_application_start.sh
+    - scripts/codedeploy_java_before_install.sh
+    - scripts/codedeploy_java_validate_service.sh
+    - scripts/gardener
+    - appspec.yml

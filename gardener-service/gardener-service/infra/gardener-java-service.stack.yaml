@@ -1,0 +1,697 @@
+Description: Java Stack for Gardener Service
+
+Mappings:
+  RegionOS2AMI:
+    us-east-1:
+      Linux: ami-97785bed
+    us-west-2:
+      Linux: ami-f2d3638a
+
+Parameters:
+  OperatingSystem:
+    Description: Amazon EC2 operating system type (Linux or Windows).
+    Type: String
+    Default: Linux
+    ConstraintDescription: Must be Windows or Linux.
+    AllowedValues:
+    - Linux
+    - Windows
+
+  IsDevInstanceParam:
+    Description: Is this a dev or production instnace.
+    Type: String
+    Default: dev
+    AllowedValues:
+    - dev
+    - prod
+
+  KeyPairName:
+    Description: Is this a dev or production instnace.
+    Type: String
+    Default: 'cloudtech'
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: "[\\x20-\\x7E]*"
+    ConstraintDescription: KeyPairName is a required Field and can contain only ASCII
+
+Conditions:
+  IsDevInstance:
+    Fn::Equals:
+      - Ref: IsDevInstanceParam
+      - 'dev'
+
+# Databases are defined in other stack.
+Resources:
+
+  # Code build section for creating this code.
+
+
+# #!/bin/bash
+#
+#  yum -y update
+#  yum install -y ruby
+#  yum install -y aws-cli
+#  cd /home/ec2-user
+#  aws s3 cp s3://aws-codedeploy-us-east-1/latest/install . --region us-east-1
+#  chmod +x ./install
+#  ./install auto
+
+  GardenerEC2Instance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        services:
+          sysvint:
+            codedeploy-agent:
+              enabled: 'true'
+              ensureRunning: 'true'
+    Properties:
+      ImageId:
+        Fn::FindInMap:
+        - RegionOS2AMI
+        - Ref: AWS::Region
+        - Ref: OperatingSystem
+      InstanceType: t2.micro
+      SubnetId: subnet-4474301e
+      SecurityGroupIds:
+      - Ref: SecurityGroup
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            # This section installs the code deploy agent on the machine.
+            # ToDo: Make this script region aware in with aws s3 cp line.
+            - |
+              #!/bin/bash
+
+              yum -y update
+              yum install -y java-1.8.0
+              yum remove -y java-1.7.0-openjdk
+              yum install -y ruby
+              yum install -y aws-cli
+              cd /home/ec2-user
+              aws s3 cp s3://aws-codedeploy-us-west-2/latest/install . --region us-west-2
+              chmod +x ./install
+              ./install auto
+
+              # Declare type on ssh login
+              echo "Gardener Development machine" > /etc/ssh/banner_text
+            - {
+              # Variable substitution section.
+              LocalEnvType:   !If [ IsDevInstance, 'dev', 'prod' ]
+              }
+      KeyName:
+        Ref: KeyPairName
+      Tags:
+      - Key: Name
+        Value: Gardener-v4-dev
+      - Key: DeploymentGroup
+        Value: Gardener-dev
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+      IamInstanceProfile:
+        Ref: InstanceRoleInstanceProfile
+
+
+  GardenerProdEC2Instance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        services:
+          sysvint:
+            codedeploy-agent:
+              enabled: 'true'
+              ensureRunning: 'true'
+    Properties:
+      ImageId:
+        Fn::FindInMap:
+        - RegionOS2AMI
+        - Ref: AWS::Region
+        - Ref: OperatingSystem
+      InstanceType: t2.micro
+      SubnetId: subnet-4474301e
+      SecurityGroupIds:
+      - Ref: SecurityGroup
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+          # This section installs the code deploy agent on the machine.
+          # ToDo: Make this script region aware in with aws s3 cp line.
+          - |
+            #!/bin/bash
+
+            yum -y update
+            yum install -y java-1.8.0
+            yum remove -y java-1.7.0-openjdk
+            yum install -y ruby
+            yum install -y aws-cli
+            cd /home/ec2-user
+            aws s3 cp s3://aws-codedeploy-us-west-2/latest/install . --region us-west-2
+            chmod +x ./install
+            ./install auto
+
+            # Declare type on ssh login
+            echo "Gardener Production machine" > /etc/ssh/banner_text
+          - {
+            # Variable substitution section.
+            LocalEnvType:   !If [ IsDevInstance, 'dev', 'prod' ]
+            }
+      KeyName:
+        Ref: KeyPairName
+      Tags:
+      - Key: Name
+        Value: Gardener-prod
+      - Key: DeploymentGroup
+        Value: Gardener
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+      IamInstanceProfile:
+        Ref: InstanceRoleInstanceProfile
+
+  # Try to assign gardener-dev.farmlab.asnyder.com to this instance.
+  # Might need to import the Route53 HostedZone from the VPC stack.
+  GardenerDnsRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z18GAL7O6N3SW1
+      Comment: DNS for Gardener
+      Name: gardener.farmlab.asnyder.com.
+      Type: CNAME
+      TTL: '900'
+      ResourceRecords:
+      - !GetAtt GadenerApiProdLoadBalancer.DNSName
+
+  ## ToDo: Create Dev Version of DNS Entry.
+  GardenerDevDnsRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z18GAL7O6N3SW1
+      Comment: DNS for Gardener
+      Name: gardener-dev.farmlab.asnyder.com.
+      Type: CNAME
+      TTL: '900'
+      ResourceRecords:
+      - !GetAtt GadenerApiLoadBalancer.DNSName
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Internal HTTP access via port 80 and SSH access via VPN.
+      VpcId: vpc-b45743cd
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 10.0.0.0/8
+
+  # CodeDeploy
+  CodeDeployTrustRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Sid: '1'
+          Effect: Allow
+          Principal:
+            Service:
+            - codedeploy.us-east-1.amazonaws.com
+            - codedeploy.us-west-2.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+
+  # CodeDeploy
+  CodeDeployRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: CodeDeployPolicy
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Resource:
+          - "*"
+          Action:
+          - ec2:Describe*
+        - Effect: Allow
+          Resource:
+          - "*"
+          Action:
+          - autoscaling:CompleteLifecycleAction
+          - autoscaling:DeleteLifecycleHook
+          - autoscaling:DescribeLifecycleHooks
+          - autoscaling:DescribeAutoScalingGroups
+          - autoscaling:PutLifecycleHook
+          - autoscaling:RecordLifecycleActionHeartbeat
+      Roles:
+      - Ref: CodeDeployTrustRole
+
+  # Instance permissions
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+
+  # Instance Policies
+  InstanceRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: InstanceRole
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action:
+          - autoscaling:Describe*
+          - cloudformation:Describe*
+          - cloudformation:GetTemplate
+          - s3:Get*
+          - lambda:InvokeFunction
+          - acm:GetCertificate
+          - ssm:Get*
+          - ec2:Describe*
+          - dynamodb:Get*
+          Resource: "*"
+      Roles:
+      - Ref: InstanceRole
+
+  # Role profile
+  InstanceRoleInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: InstanceRole
+
+  # Load balancing for SSL CERT and health check.
+  GadenerApiLoadBalancer:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      Subnets:
+      - subnet-606a2e3a
+      Instances:
+      - Ref: GardenerEC2Instance
+      # NOTE: Below needs a possible 2nd instance.
+      Scheme: internal
+      Listeners:
+      - LoadBalancerPort: '443'
+        InstancePort: '80'
+        Protocol: HTTPS
+        SSLCertificateId: arn:aws:acm:us-west-2:123456789012:certificate/ee027dc3-6a5a-40e9-9337-624cdc99d3fb
+      SecurityGroups:
+      - Ref: SecurityGroup
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+
+# ToDo add health-check.
+#      HealthCheck:
+#        Target: HTTP:80/
+#        HealthyThreshold: '3'
+#        UnhealthyThreshold: '5'
+#        Interval: '30'
+#        Timeout: '5'
+
+
+  # Load balancing for SSL CERT and health check.
+  GadenerApiProdLoadBalancer:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      Subnets:
+      - subnet-606a2e3a
+      Instances:
+      - Ref: GardenerProdEC2Instance
+      # NOTE: Below needs a possible 2nd instance.
+      Scheme: internal
+      Listeners:
+      - LoadBalancerPort: '443'
+        InstancePort: '80'
+        Protocol: HTTPS
+        SSLCertificateId: arn:aws:acm:us-west-2:123456789012:certificate/ee027dc3-6a5a-40e9-9337-624cdc99d3fb
+      SecurityGroups:
+      - Ref: SecurityGroup
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+  # ToDo add health-check.
+  #      HealthCheck:
+  #        Target: HTTP:80/
+  #        HealthyThreshold: '3'
+  #        UnhealthyThreshold: '5'
+  #        Interval: '30'
+  #        Timeout: '5'
+
+
+  # Pipeline to deploy java code.
+  GardenerJavaPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location:
+          Ref: GardenerJavaPipelineBucket
+        Type: S3
+      RoleArn: !GetAtt GardenerJavaPipelineRole.Arn
+      Stages:
+        - Name: JavaSourceS3Bucket
+          Actions:
+          - Name: CheckJavaSourceBucket
+            ActionTypeId:
+              Category: Source
+              Owner: AWS
+              Version: '1'
+              Provider: S3
+            OutputArtifacts:
+              - Name: RawCode
+            Configuration:
+              S3Bucket: !Ref PipelineJavaSourceCodeBucket
+              S3ObjectKey: gardener-java-bare-repo-files.zip
+            RunOrder: 1
+        - Name: BuildCode
+          Actions:
+          - Name: JavaGardenerCodeBuild
+            ActionTypeId:
+              Category: Build
+              Owner: AWS
+              Version: '1'
+              Provider: CodeBuild
+            Configuration:
+              ProjectName: !Ref GardenerJavaCodeBuild
+            InputArtifacts:
+              - Name: RawCode
+            OutputArtifacts:
+              - Name: JavaZip
+        - Name: JavaDeployDev
+          Actions:
+          - Name: UpdateDevJavaAction
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Version: 1
+              Provider: CodeDeploy
+            InputArtifacts:
+              - Name: JavaZip
+            OutputArtifacts: []
+            Configuration:
+              ApplicationName: !Ref Application
+              DeploymentGroupName: !Ref DeploymentGroup
+            RunOrder: 1
+        - Name: ManualApproval
+          Actions:
+          - InputArtifacts: []
+            Name: ApproveJavaForProd
+            ActionTypeId:
+              Category: Approval
+              Owner: AWS
+              Version: '1'
+              Provider: Manual
+            OutputArtifacts: []
+            Configuration:
+              NotificationArn: !Ref SNSTopicJavaManualApproval
+              CustomData: Approve to deploy Gardener Java release to production.
+            RunOrder: 1
+        - Name: JavaDeployProd
+          Actions:
+          - Name: UpdateProdJavaAction
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Version: 1
+              Provider: CodeDeploy
+            InputArtifacts:
+            - Name: JavaZip
+            OutputArtifacts: []
+            Configuration:
+              ApplicationName: !Ref Application
+              DeploymentGroupName: !Ref DeploymentGroupProd
+            RunOrder: 1
+
+  SNSTopicJavaManualApproval:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+      - Endpoint: "asnyder@roku.com"
+        Protocol: email
+      - Endpoint: "asnyder@roku.com"
+        Protocol: email
+
+  Application:
+    Type: "AWS::CodeDeploy::Application"
+
+  DeploymentGroup:
+    Type: "AWS::CodeDeploy::DeploymentGroup"
+    Properties:
+      ApplicationName: !Ref Application
+      Ec2TagFilters:
+        - Key: DeploymentGroup
+          Type: KEY_AND_VALUE
+          Value: Gardener-dev
+      ServiceRoleArn: !Sub '${CodeDeployIAMRole.Arn}'
+
+  DeploymentGroupProd:
+    Type: "AWS::CodeDeploy::DeploymentGroup"
+    Properties:
+      ApplicationName: !Ref Application
+      Ec2TagFilters:
+      - Key: DeploymentGroup
+        Type: KEY_AND_VALUE
+        Value: Gardener
+      ServiceRoleArn: !Sub '${CodeDeployIAMRole.Arn}'
+
+  # JavaPipeline artifact bucket
+  GardenerJavaPipelineBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: "gardener-java-pipeline-artifacts"
+      LifecycleConfiguration:
+        Rules:
+        - Id: DeleteObjectsAfter60DaysRule
+          Status: Enabled
+          ExpirationInDays: '60'
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+
+  # JavaSource bucket
+  PipelineJavaSourceCodeBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: "gardener-java-pipeline-source"
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+      - Key: Department
+        Value: CTI
+      - Key: Stack
+        Value: DYNAMODB
+      - Key: Spend_Category
+        Value: Farms
+      - Key: Owner
+        Value: CTI-Team
+
+  # Java CodeBuild
+  GardenerJavaCodeBuild:
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Name: gardener-java-build
+      Description: Build java Gardener using Gradle
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: java-buildspec.yml
+      VpcConfig:
+        SecurityGroupIds:
+          - sg-d1eedba0
+        Subnets:
+          - subnet-3f4b2546
+        VpcId: vpc-b45743cd
+      TimeoutInMinutes: 10
+      ServiceRole: !GetAtt GardenerJavaCodeBuildRole.Arn
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: java:openjdk-8
+        Type: LINUX_CONTAINER
+        # NOTE: eb-java-8-amazonlinux-64:2.4.3   (might be an option for a Amazon Linux version.)
+        # This will have Gradle 2.7 installed.
+      Artifacts:
+        Type: CODEPIPELINE
+
+  CodeDeployIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - 'codedeploy.amazonaws.com'
+          Action:
+          - 'sts:AssumeRole'
+      Path: '/'
+      ManagedPolicyArns:
+      - 'arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole'
+
+  GardenerJavaPipelineRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+            - codepipeline.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - sts:AssumeRole
+            - iam:GetRole
+            - iam:PassRole
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - sts:AssumeRole
+            - iam:GetRole
+            - iam:PassRole
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Effect: Allow
+            Resource: arn:aws:logs:*:*:*
+          - Action:
+            - codedeploy:CreateDeployment
+            - codedeploy:GetApplicationRevision
+            - codedeploy:GetDeployment
+            - codedeploy:GetDeploymentConfig
+            - codedeploy:RegisterApplicationRevision
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - lambda:*
+            - s3:*
+            - codepipeline:*
+            - codebuild:*
+            - sns:Publish
+            - ses:SendRawEmail
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: gardener-java-pipeline-policy
+
+  GardenerJavaCodeBuildRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Resource:
+            - arn:aws:logs:us-west-2:123456789012:log-group:/aws/codebuild/*
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          - Effect: Allow
+            Resource:
+            - arn:aws:s3:::codepipeline-us-west-2-*
+            Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:GetObjectVersion
+          - Effect: Allow
+            Resource:
+            - arn:aws:s3:::gardener-java-pipeline-source/gardener-java-bare-repo-files.zip
+            Action:
+            - s3:List*
+            - s3:GetObject
+            - s3:GetObjectVersion
+          - Effect: Allow
+            Resource:
+            - arn:aws:s3:::gardener-java-pipeline-source/*
+            - arn:aws:s3:::gardener-java-pipeline-artifacts/*
+            Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            - s3:List*
+            - s3:CreateBucket
+          - Effect: Allow
+            Action:
+            - ssm:GetParameters
+            Resource: arn:aws:ssm:us-west-2:123456789012:parameter/CodeBuild/*
+          - Action:
+            - cloudformation:*
+            - s3:*
+            - apigateway:*
+            - logs:*
+            - iam:*
+            - lambda:*
+            - ec2:*
+            Resource: "*"
+            Effect: Allow
+        PolicyName: gardener-java-code-build-policy
+
+Outputs:
+  CodeDeployTrustRoleARN:
+    Value:
+      Fn::GetAtt:
+      - CodeDeployTrustRole
+      - Arn
