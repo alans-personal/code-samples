@@ -10,7 +10,7 @@ A collection of sample projects demonstrating various AWS services, infrastructu
 
 This repository contains five distinct projects showcasing different approaches to cloud infrastructure and application development:
 
-### 1. **AWS CDK Loki Create** (`aws-cdk-loki-create/`)
+### 1. **Loki Grafana AWS CDK** (`loki-grafana-aws-cdk/`)
 A logging infrastructure project that sets up Grafana and Loki on EC2 instances for centralized log collection and visualization.
 
 **Infrastructure-as-Code:** AWS CDK (Python)  
@@ -52,7 +52,7 @@ A full-stack web application demonstrating user authentication with AWS Cognito 
 
 ## Quick Navigation
 
-- [AWS CDK Loki Create](./aws-cdk-loki-create/ec2-loki/README.md)
+- [Loki Grafana AWS CDK](./loki-grafana-aws-cdk/README.md)
 - [AWS Cost](./awscost/awscost/README.md)
 - [Gardener Service](./gardener-service/gardener-service/README.md)
 - [Slack Commands](./slack-cmds/cti-slackbud/README.md)

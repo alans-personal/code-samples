@@ -1,4 +1,4 @@
-# AWS CDK Loki Create
+# Loki Grafana AWS CDK
 
 A logging infrastructure project that sets up Grafana and Loki on EC2 instances for centralized log collection and visualization.
 
